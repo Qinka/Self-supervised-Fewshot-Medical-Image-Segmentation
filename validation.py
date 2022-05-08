@@ -2,7 +2,9 @@
 Validation script
 """
 import os
+from random import random
 import shutil
+import cv2
 import torch
 import torch.nn as nn
 import torch.optim
@@ -25,7 +27,7 @@ from config_ssl_upload import ex
 
 import tqdm
 import SimpleITK as sitk
-from torchvision.utils import make_grid
+from torchvision.utils import make_grid, save_image
 
 # config pre-trained model caching path
 os.environ['TORCH_HOME'] = "./pretrained_model"
@@ -33,6 +35,7 @@ os.environ['TORCH_HOME'] = "./pretrained_model"
 @ex.automain
 def main(_run, _config, _log):
     if _run.observers:
+        os.makedirs(f'{_run.observers[0].dir}/display', exist_ok=True)
         os.makedirs(f'{_run.observers[0].dir}/interm_preds', exist_ok=True)
         for source_file, _ in _run.experiment_info['sources']:
             os.makedirs(os.path.dirname(f'{_run.observers[0].dir}/source/{source_file}'),
@@ -76,7 +79,7 @@ def main(_run, _config, _log):
     _log.info(f'###### Labels excluded in training : {[lb for lb in _config["exclude_cls_list"]]} ######')
     _log.info(f'###### Unseen labels evaluated in testing: {[lb for lb in test_labels]} ######')
 
-    if baseset_name == 'SABS': # for CT we need to know statistics of 
+    if baseset_name == 'SABS': # for CT we need to know statistics of
         tr_parent = SuperpixelDataset( # base dataset
             which_dataset = baseset_name,
             base_dir=_config['path'][data_name]['data_dir'],
@@ -122,6 +125,8 @@ def main(_run, _config, _log):
     _log.info('###### Starting validation ######')
     model.eval()
     mar_val_metric_node.reset()
+
+    display_id = 0
 
     with torch.no_grad():
         save_pred_buffer = {} # indexed by class
@@ -169,11 +174,36 @@ def main(_run, _config, _log):
 
                 query_pred, _, _, assign_mats = model( sup_img_part , sup_fgm_part, sup_bgm_part, query_images, isval = True, val_wsize = _config["val_wsize"] )
 
+                if random() >= 0.9 and query_labels.max() > 0:
+                    image = torch.cat(query_images, dim = 0)
+                    label = torch.zeros_like(image)
+
+                    label[0, 0][query_pred.argmax(dim=1)[0] == 1] = 1 # R B
+                    label[0, 1][query_labels[0] == 1] = 1 # G G
+                    print(display_id, label[0, 0].max(), label[0, 1].max())
+
+                    image = make_grid(image)
+                    image -= image.min()
+                    image /= image.max()
+
+                    label = make_grid(label)
+                    image = (image.cpu().numpy() * 255).astype('uint8').transpose(1, 2, 0)
+                    label = (label.cpu().numpy() * 255).astype('uint8').transpose(1, 2, 0)
+
+                    mixed = cv2.addWeighted(image, 1, label, 0.5, 0)
+                    image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+                    mixed = cv2.cvtColor(mixed, cv2.COLOR_RGB2BGR)
+                    label = cv2.cvtColor(label, cv2.COLOR_RGB2BGR)
+                    cv2.imwrite(f'{_run.observers[0].dir}/display/{display_id}-i.png', image)
+                    cv2.imwrite(f'{_run.observers[0].dir}/display/{display_id}-l.png', label)
+                    cv2.imwrite(f'{_run.observers[0].dir}/display/{display_id}-m.png', mixed)
+                    display_id += 1
+
                 query_pred = np.array(query_pred.argmax(dim=1)[0].cpu())
                 _pred[..., ii] = query_pred.copy()
 
                 if (sample_batched["z_id"] - sample_batched["z_max"] <= _config['z_margin']) and (sample_batched["z_id"] - sample_batched["z_min"] >= -1 * _config['z_margin']):
-                    mar_val_metric_node.record(query_pred, np.array(query_labels[0].cpu()), labels=[curr_lb], n_scan=curr_scan_count) 
+                    mar_val_metric_node.record(query_pred, np.array(query_labels[0].cpu()), labels=[curr_lb], n_scan=curr_scan_count)
                 else:
                     pass
 
@@ -183,7 +213,9 @@ def main(_run, _config, _log):
                     if _config['dataset'] != 'C0':
                         _lb_buffer[_scan_id] = _pred.transpose(2,0,1) # H, W, Z -> to Z H W
                     else:
-                        lb_buffer[_scan_id] = _pred
+                        _lb_buffer[_scan_id] = _pred
+
+
 
             save_pred_buffer[str(curr_lb)] = _lb_buffer
 
