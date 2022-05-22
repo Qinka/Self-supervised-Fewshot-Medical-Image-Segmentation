@@ -35,8 +35,19 @@ DATASET_INFO = {
                 0: set([1,6]  ), # upper_abdomen: spleen + liver as training, kidneis are testing
                 1: set( [2,3] ), # lower_abdomen
                     }
-            }
+            },
+    'AMOS22': {
+            'PSEU_LABEL_NAME': ["BGD", "SUPFG"],
 
+            'REAL_LABEL_NAME': ["BGD", "SPLEEN", "KID_R", "KID_L", "GALLBLADDER", "ESOPHAGUS", "LIVER", "STOMACH", "AORTA", "IVC",  "PANCREAS", "AG_R", "AG_L", "DUODENUM", "BLADDER", "PROSTATE"],
+            '_SEP': [0, 40, 80, 120, 160, 200],
+            'MODALITY': 'CT',
+            'LABEL_GROUP':{
+                'pa_all': set( [1,2,3,6]  ),
+                0: set([1,6]  ), # upper_abdomen: spleen + liver as training, kidneis are testing
+                1: set( [2,3] ), # lower_abdomen
+                    }
+        },
 }
 
 def read_nii_bysitk(input_fid, peel_info = False):

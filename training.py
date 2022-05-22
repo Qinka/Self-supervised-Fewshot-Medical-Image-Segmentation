@@ -59,6 +59,8 @@ def main(_run, _config, _log):
         baseset_name = 'C0'
     elif data_name == 'CHAOST2_Superpix':
         baseset_name = 'CHAOST2'
+    elif data_name == 'AMOS22_Superpix':
+        baseset_name = 'AMOS22'
     else:
         raise ValueError(f'Dataset: {data_name} not found')
 
